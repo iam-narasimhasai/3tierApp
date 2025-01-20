@@ -1,0 +1,7 @@
+Dockerfile.prod
+.env
+Dockerfile
+Dockerfile.npr
+Jenkinsfile
+test-results.xml
+manifest/*

@@ -1,0 +1,21 @@
+FROM node:23-alpine3.20 AS base
+
+WORKDIR /app
+
+COPY package*.json ./
+
+RUN npm install
+
+COPY . .
+
+RUN npm run build
+
+FROM nginx:stable-alpine
+
+COPY --from=base /app/build /usr/share/nginx/html
+
+EXPOSE 80
+
+ENV REACT_APP_API_URL=http://localhost:321/goals
+
+CMD ["nginx", "-g", "daemon off;"]
