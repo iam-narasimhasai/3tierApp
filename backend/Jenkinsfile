@@ -106,7 +106,7 @@ pipeline {
                 cd backend/
                 
                 trivy image narasimhasai9581/testingbackend:${GIT_COMMIT} \
-                      --severity LOW,MEDIUM.HIGH \
+                      --severity LOW,MEDIUM,HIGH \
                       --exit-code 0 \
                       --quiet \
                       --format json -o trivy-image-MEDIUM-results.json
