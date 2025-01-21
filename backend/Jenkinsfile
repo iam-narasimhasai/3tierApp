@@ -99,32 +99,29 @@ pipeline {
             }
 
         }
-        stage('Trivy Vulnerability Scanner') {
-            steps{
+stage('Trivy Vulnerability Scanner') {
+    steps {
+        sh '''
+        cd backend/
         
-                sh '''
-                cd backend/
-                
-                trivy image narasimhasai9581/testingbackend:${GIT_COMMIT} \
-                      --severity LOW,MEDIUM,HIGH \
-                      --exit-code 0 \
-                      --quiet \
-                      --format json -o trivy-image-MEDIUM-results.json
+        # Run Trivy for LOW, MEDIUM, and HIGH severities
+        trivy image --severity LOW,MEDIUM,HIGH \
+                    --exit-code 0 \
+                    --quiet \
+                    --format json \
+                    -o trivy-image-MEDIUM-results.json \
+                    narasimhasai9581/testingbackend:${GIT_COMMIT}
 
-                trivy image narasimhasai9581/testingbackend:${GIT_COMMIT} \
-                      --severity CRITICAL \
-                      --exit-code 1 \
-                      --quiet \
-                      --format json -o trivy-image-CRITICAL-results.json
-
-
-                '''
-
-
-
-            }
-
-        }
+        # Run Trivy for CRITICAL severities
+        trivy image --severity CRITICAL \
+                    --exit-code 1 \
+                    --quiet \
+                    --format json \
+                    -o trivy-image-CRITICAL-results.json \
+                    narasimhasai9581/testingbackend:${GIT_COMMIT}
+        '''
+    }
+}
 
 
 
