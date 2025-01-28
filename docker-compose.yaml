@@ -1,0 +1,52 @@
+version: '3.1'
+
+services:
+  database:
+    image: mongo
+    container_name: database
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: sai
+      MONGO_INITDB_ROOT_PASSWORD: secret
+    volumes:
+      - 'data:/data/db'
+    networks:
+      - feedback
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend
+    ports:
+      - "345:345"
+    environment:
+      - MONGO_URL=mongodb://sai:secret@database:27017/course-goals?authSource=admin
+      - PORT=345
+    volumes:
+      - 'logs:/app/logs'
+
+    depends_on:
+      - database
+    networks:
+      - feedback
+  
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:345/goals
+    networks:
+      - feedback
+
+networks:
+  feedback:
+    driver: bridge
+volumes:
+  data:
+  logs:

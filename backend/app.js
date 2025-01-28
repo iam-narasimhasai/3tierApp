@@ -66,8 +66,7 @@ app.delete('/goals/:id', async (req, res) => {
   }
 });
 
-const mongoose = require('mongoose');
-const http = require('http');
+
 
 const port = process.env.PORT || 3000;
 const mongoUri = process.env.MONGOURI;
@@ -79,6 +78,12 @@ if (!mongoUri) {
   process.exit(1);
 }
 
+const mongoose = require('mongoose');
+const http = require('http');
+ // Ensure app.js or equivalent is correctly imported
+
+
+
 // Build connection string
 let fullMongoUri = mongoUri;
 if (mongoUser && mongoPassword) {
@@ -89,10 +94,11 @@ if (mongoUser && mongoPassword) {
     fullMongoUri = `${uriParts[0]}://${encodedUser}:${encodedPassword}@${uriParts[1]}`;
   }
 }
+console.log('Constructed MongoDB URI:', fullMongoUri);
 
 const startServer = async () => {
   try {
-    await mongoose.connect(fullMongoUri);
+    await mongoose.connect(fullMongoUri, { useNewUrlParser: true, useUnifiedTopology: true });
     console.log('Connected to MongoDB');
 
     const server = http.createServer(app); // Create HTTP server
@@ -100,8 +106,8 @@ const startServer = async () => {
       console.log(`Server is running on port ${port}`);
     });
   } catch (err) {
-    console.error('Failed to connect to MongoDB:', err);
-    process.exit(1);
+    console.error('Failed to connect to MongoDB:', err.message, err.stack);
+    process.exit(1); // Exit process with failure
   }
 };
 

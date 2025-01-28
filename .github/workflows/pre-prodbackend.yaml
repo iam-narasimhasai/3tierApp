@@ -1,0 +1,195 @@
+
+name: backend Testing  
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - pre-prod
+
+env:   
+  MONGO_URL: ${{secrets.MONGO_URL}}
+  PORT: ${{vars.PORT}}
+
+jobs:
+  unit-testing:
+    name: Unit Testing
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        nodejs_version: [18,19,20]
+        os: [ubuntu-latest]
+        
+    runs-on: ${{matrix.os}}
+
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Version - ${{matrix.nodejs_version}}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{matrix.nodejs_version}}
+      
+      - name: Cache NPM Dependencies
+        uses: actions/cache@v4
+        with:
+          path: backend/node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json')}}
+
+      - name: Install Dependencies
+        run: npm install
+      
+
+      - name: Run Unit Test for backend app
+        continue-on-error: true
+        run: npm run test
+
+        
+      - name: Upload Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results on ${{matrix.os}} with node version ${{matrix.nodejs_version}}
+          path: backend/test-results.xml
+  
+  code-coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup NodeJs Version - 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      
+      - name: Cache NPM Dependencies
+        uses: actions/cache@v4
+        with:
+          path: backend/node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json')}}
+   
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Check Code Coverage
+        continue-on-error: true
+        id: nodecoverage
+        run: npm run coverage
+
+      - name: Archive Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Code-Coverage-Result
+          path: backend/coverage
+          retention-days: 5
+
+  docker:
+    name: Containerization
+    # needs: [unit-testing,code-coverage]
+    runs-on: ubuntu-latest
+
+    permissions: 
+      packages: write
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+
+    - name: Checkout Repo
+      uses: actions/checkout@v4
+
+    - name: Dockerhub Login
+      uses: docker/login-action@v3.3.0
+      with:
+        username: ${{ vars.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+    - name: GHCR login
+      uses: docker/login-action@v3.3.0
+      with:
+        registry: ghcr.io
+        username: ${{github.repository_owner}}
+        password: ${{secrets.GITHUB_TOKEN}}
+    
+
+
+    - name: AWS ECR Login
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2.0.1
+      with:
+       registry-type: private
+       #registry-type: public
+       #public.ecr.aws/testbackend:latest
+      env:
+        AWS_REGION: ${{secrets.AWS_REGION}}
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    - name: Create ECR Repository (if missing)
+      run: |
+          aws ecr create-repository --repository-name testbackend --region ${{ secrets.AWS_REGION }} || echo "Repository already exists"
+      env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      
+
+    - name: Docker Build & Push
+      uses: docker/build-push-action@v6.10.0
+      with:
+        context: ./backend
+        push: true
+        tags: |
+         ${{vars.DOCKERHUB_USERNAME}}/testbackend:${{ github.sha }}
+         ghcr.io/${{github.repository_owner}}/testbackend:${{github.sha}}
+         ${{steps.login-ecr.outputs.registry}}/testbackend:${{github.sha}}
+        
+  dev-deploy:
+    needs: docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install kubectl CLI
+        uses: azure/setup-kubectl@v3
+
+      - name: Kubernetes Set Context
+        uses: Azure/k8s-set-context@v4.0.1
+        with:
+          method: kubeconfig
+          kubeconfig: ${{secrets.KUBECONFIG}}
+       
+      - name: Fetch Kubernets Cluster Details
+        run: |
+         kubectl version
+         kubectl get nodes
+
+      - name: Create secrets for k8s env
+        run: |
+          kubectl create secret generic backendsecrets --from-literal=PORT=${{vars.PORT}} --from-literal=MONGO_URL=${{secrets.MONGO_URL}}  || echo "Secret already exists"
+
+      - name: Deploy Manifest files
+        run: |
+          kubectl apply -f backend/manifest
+          sleep 70s
+          kubectl get svc
+          kubectl get pv
+          kubectl get sc
+          kubectl get pvc
+

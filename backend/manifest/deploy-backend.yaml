@@ -1,0 +1,51 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backenddeploy
+spec:
+  replicas: 2
+  selector:
+    matchLabels: 
+      app: backend
+  template:
+    metadata:
+      labels: 
+        app: backend
+    spec:
+      containers:
+        - name: cont1
+          image: narasimhasai95/express
+          ports:
+            - containerPort: 3000
+          volumeMounts:
+            - mountPath: "/app/logs"
+              name: ebs-volume
+          env:
+            - name: MONGO_URL
+              valueFrom:
+                secretKeyRef: 
+                  name: backendsecrets
+                  key: MONGO_URL 
+            - name: PORT
+              valueFrom:
+                secretKeyRef: 
+                  name: backendsecrets
+                  key: PORT
+      volumes:  
+        - name: ebs-volume
+          persistentVolumeClaim:
+            claimName: ebs-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backendservice
+spec:
+  type: LoadBalancer
+  selector:
+    app: backend
+  ports:
+    - port: 80
+      targetPort: 3000
